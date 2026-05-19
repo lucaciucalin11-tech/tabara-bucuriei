@@ -1,38 +1,30 @@
 const express = require('express');
 const cors = require('cors');
-const Database = require('better-sqlite3');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const DB_FILE = path.join(DATA_DIR, 'inscrieri.json');
+if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '[]');
 
-const db = new Database(path.join(DATA_DIR, 'tabara.db'));
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS inscrieri (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    numecopil TEXT NOT NULL,
-    an INTEGER NOT NULL,
-    localitate TEXT NOT NULL,
-    numeParinte TEXT NOT NULL,
-    transport TEXT NOT NULL,
-    data TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+function readDB() {
+  try { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
+  catch { return []; }
+}
+function writeDB(data) {
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+}
 
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, '../client/build')));
 
 app.get('/api/inscrieri', (req, res) => {
-  const rows = db.prepare('SELECT * FROM inscrieri ORDER BY created_at DESC').all();
-  res.json(rows);
+  res.json(readDB());
 });
 
 app.post('/api/inscrieri', (req, res) => {
@@ -40,17 +32,20 @@ app.post('/api/inscrieri', (req, res) => {
   if (!numecopil || !an || !localitate || !numeParinte || !transport) {
     return res.status(400).json({ error: 'Câmpuri obligatorii lipsesc' });
   }
-  const stmt = db.prepare(
-    'INSERT INTO inscrieri (numecopil, an, localitate, numeParinte, transport, data) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-  const result = stmt.run(numecopil, an, localitate, numeParinte, transport, data || new Date().toLocaleDateString('ro-RO'));
-  const row = db.prepare('SELECT * FROM inscrieri WHERE id = ?').get(result.lastInsertRowid);
-  res.status(201).json(row);
+  const db = readDB();
+  const entry = {
+    id: Date.now(),
+    numecopil, an, localitate, numeParinte, transport,
+    data: data || new Date().toLocaleDateString('ro-RO')
+  };
+  db.unshift(entry);
+  writeDB(db);
+  res.status(201).json(entry);
 });
 
 app.delete('/api/inscrieri/:id', (req, res) => {
-  const { id } = req.params;
-  db.prepare('DELETE FROM inscrieri WHERE id = ?').run(id);
+  const db = readDB().filter(r => r.id !== parseInt(req.params.id));
+  writeDB(db);
   res.json({ ok: true });
 });
 
