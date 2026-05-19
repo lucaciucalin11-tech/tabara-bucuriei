@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: tabara-bucuriei
+    env: node
+    buildCommand: "npm run build && cd server && npm install"
+    startCommand: "npm start"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: REACT_APP_ADMIN_PASS
+        generateValue: false
+    disk:
+      name: tabara-data
+      mountPath: /var/data
+      sizeGB: 1
